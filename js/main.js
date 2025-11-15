@@ -5,9 +5,11 @@
 
 let subjectsGrid, searchResults, noResults, searchInput, clearSearchBtn;
 let pdfModal, pdfViewer, closeModalBtn, downloadBtn, loadingSkeleton, particlesContainer;
+let scrollProgress, themeToggle, scrollToTop, totalPdfsEl, totalCategoriesEl;
 let isSearching = false;
 let animationFrameId;
 let particles = [];
+let currentFilter = 'all';
 
 // Subject icons and colors
 const subjectInfo = {
@@ -19,6 +21,16 @@ const subjectInfo = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Add page entrance animation
+    document.body.style.opacity = '0';
+    document.body.style.transform = 'translateY(10px)';
+    
+    setTimeout(() => {
+        document.body.style.transition = 'opacity 0.5s ease-out, transform 0.5s ease-out';
+        document.body.style.opacity = '1';
+        document.body.style.transform = 'translateY(0)';
+    }, 50);
+    
     // DOM Elements
     subjectsGrid = document.getElementById('subjectsGrid');
     searchResults = document.getElementById('searchResults');
@@ -31,10 +43,17 @@ document.addEventListener('DOMContentLoaded', () => {
     downloadBtn = document.getElementById('downloadBtn');
     loadingSkeleton = document.getElementById('loadingSkeleton');
     particlesContainer = document.getElementById('particles-container');
+    scrollProgress = document.getElementById('scrollProgress');
+    themeToggle = document.getElementById('themeToggle');
+    scrollToTop = document.getElementById('scrollToTop');
+    totalPdfsEl = document.getElementById('totalPdfs');
+    totalCategoriesEl = document.getElementById('totalCategories');
 
     // Initialize features
     initializeParticles();
     initializeEnhancedEffects();
+    initializeNewUIElements();
+    updateStats();
 
     if (subjectsGrid) {
         initializeMainPage();
@@ -47,9 +66,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function initializeMainPage() {
     loadingSkeleton.style.display = 'flex';
+    loadingSkeleton.style.animation = 'fadeInScale 0.5s ease-out';
+    
     setTimeout(() => {
         renderSubjectsGrid();
         loadingSkeleton.style.opacity = '0';
+        loadingSkeleton.style.transform = 'scale(0.95)';
+        
         setTimeout(() => {
             loadingSkeleton.style.display = 'none';
             subjectsGrid.style.display = 'grid';
@@ -149,7 +172,7 @@ function renderSubjectsGrid() {
 
 function createEnhancedSubjectButton(name, count, index) {
     const a = document.createElement('a');
-    a.className = 'subject-button';
+    a.className = 'subject-button smooth-transition';
     a.href = `${name.toLowerCase()}.html`;
     const info = subjectInfo[name] || { icon: "Book", color: "#6b7280" };
     a.innerHTML = `
@@ -160,7 +183,47 @@ function createEnhancedSubjectButton(name, count, index) {
         </div>
         <div class="subject-glow"></div>
     `;
-    addSubjectButtonEffects(a);
+    
+    // Enhanced interaction effects
+    a.addEventListener('click', function(e) {
+        // Create ripple effect at click position
+        const ripple = document.createElement('span');
+        const rect = this.getBoundingClientRect();
+        const size = Math.max(rect.width, rect.height) * 2;
+        const x = e.clientX - rect.left - size / 2;
+        const y = e.clientY - rect.top - size / 2;
+        
+        ripple.className = 'ripple';
+        ripple.style.cssText = `
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.6);
+            width: ${size}px;
+            height: ${size}px;
+            left: ${x}px;
+            top: ${y}px;
+            transform: scale(0);
+            animation: ripple 0.8s ease-out;
+            pointer-events: none;
+        `;
+        this.style.position = 'relative';
+        this.style.overflow = 'hidden';
+        this.appendChild(ripple);
+        setTimeout(() => ripple.remove(), 800);
+    });
+    
+    // 3D tilt effect on mouse move
+    a.addEventListener('mousemove', e => {
+        const r = a.getBoundingClientRect();
+        const x = e.clientX - r.left - r.width / 2;
+        const y = e.clientY - r.top - r.height / 2;
+        a.style.transform = `translateY(-8px) rotateX(${-y * 0.02}deg) rotateY(${x * 0.02}deg) scale(1.02)`;
+    });
+    
+    a.addEventListener('mouseleave', () => {
+        a.style.transform = 'translateY(0) rotateX(0) rotateY(0) scale(1)';
+    });
+    
     generateSubjectPage(name, info);
     return a;
 }
@@ -194,14 +257,21 @@ function renderSubjectPdfs(subjectName) {
         container.innerHTML = `<div class="no-results" style="grid-column:1/-1"><p>No PDFs yet.</p></div>`;
         return;
     }
+    
+    // Add stagger animation with enhanced timing
     pdfs.forEach((pdf, i) => {
-        setTimeout(() => container.appendChild(createPdfCard(pdf)), i * 100);
+        setTimeout(() => {
+            const card = createPdfCard(pdf);
+            card.style.animation = `fadeInScale 0.6s ease-out both`;
+            card.style.animationDelay = `${i * 0.05}s`;
+            container.appendChild(card);
+        }, i * 50);
     });
 }
 
 function createPdfCard(pdf) {
     const card = document.createElement('div');
-    card.className = 'pdf-card';
+    card.className = 'pdf-card smooth-transition';
     const info = subjectInfo[pdf.category] || { icon: "Book", color: "#6b7280" };
     card.innerHTML = `
         <div class="pdf-thumbnail"><div class="pdf-thumbnail-icon">${info.icon}</div></div>
@@ -209,30 +279,61 @@ function createPdfCard(pdf) {
             <div class="pdf-card-title">${pdf.title}</div>
             ${pdf.description ? `<div class="pdf-card-description">${pdf.description}</div>` : ''}
             <div class="pdf-card-actions">
-                <button class="btn-view-card" data-path="${pdf.path}" data-filename="${pdf.filename}">View</button>
-                <a href="${pdf.path}" download="${pdf.filename}" class="btn-download-card">Download</a>
+                <button class="btn-view-card smooth-transition" data-path="${pdf.path}" data-filename="${pdf.filename}">View</button>
+                <a href="${pdf.path}" download="${pdf.filename}" class="btn-download-card smooth-transition">Download</a>
             </div>
         </div>
     `;
-    card.querySelector('.btn-view-card').addEventListener('click', (e) => {
-        openPdfModal(e.target.dataset.path, e.target.dataset.filename);
+    
+    const viewBtn = card.querySelector('.btn-view-card');
+    viewBtn.addEventListener('click', (e) => {
+        // Add click animation
+        e.target.style.transform = 'scale(0.95)';
+        setTimeout(() => {
+            e.target.style.transform = '';
+            openPdfModal(e.target.dataset.path, e.target.dataset.filename);
+        }, 100);
     });
-    card.addEventListener('mouseenter', () => card.style.transform = 'translateY(-8px)');
-    card.addEventListener('mouseleave', () => card.style.transform = 'translateY(0)');
+    
+    // Enhanced hover effects
+    card.addEventListener('mouseenter', () => {
+        card.style.transform = 'translateY(-8px)';
+        card.querySelector('.pdf-thumbnail-icon').style.transform = 'scale(1.1) rotate(5deg)';
+    });
+    
+    card.addEventListener('mouseleave', () => {
+        card.style.transform = 'translateY(0)';
+        card.querySelector('.pdf-thumbnail-icon').style.transform = 'scale(1) rotate(0)';
+    });
+    
+    // Add ripple effect to buttons
+    addRippleEffect(viewBtn);
+    addRippleEffect(card.querySelector('.btn-download-card'));
+    
     return card;
 }
 
-// === Native PDF Modal ===
+// === PDF Viewer with Google Docs Viewer ===
 function openPdfModal(pdfPath, filename) {
     pdfModal.classList.add('active');
+    pdfViewer.style.opacity = '0';
     pdfViewer.src = pdfPath;
     downloadBtn.href = pdfPath;
     downloadBtn.download = filename || 'document.pdf';
+    
+    // Add smooth fade-in for PDF viewer
+    setTimeout(() => {
+        pdfViewer.style.opacity = '1';
+    }, 200);
+    
     setTimeout(() => {
         pdfModal.style.opacity = '1';
         pdfModal.querySelector('.modal-content').style.animation = 'slideUpScale 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)';
     }, 10);
     document.body.style.overflow = 'hidden';
+    
+    // Add ripple effect to download button
+    addRippleEffect(downloadBtn);
 }
 
 function closePdfModal() {
@@ -241,8 +342,144 @@ function closePdfModal() {
         pdfModal.classList.remove('active');
         pdfModal.style.opacity = '0';
         pdfViewer.src = '';
+        pdfViewer.style.opacity = '0';
         document.body.style.overflow = '';
     }, 300);
+}
+
+// === Enhanced Ripple Effect ===
+function addRippleEffect(element) {
+    element.addEventListener('click', function(e) {
+        const ripple = document.createElement('span');
+        const rect = this.getBoundingClientRect();
+        const size = Math.max(rect.width, rect.height);
+        const x = e.clientX - rect.left - size / 2;
+        const y = e.clientY - rect.top - size / 2;
+        
+        ripple.style.cssText = `
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.6);
+            width: ${size}px;
+            height: ${size}px;
+            left: ${x}px;
+            top: ${y}px;
+            transform: scale(0);
+            animation: ripple 0.6s ease-out;
+            pointer-events: none;
+        `;
+        ripple.className = 'ripple-effect';
+        this.style.position = 'relative';
+        this.style.overflow = 'hidden';
+        this.appendChild(ripple);
+        setTimeout(() => ripple.remove(), 600);
+    });
+}
+
+// === New UI Elements ===
+function initializeNewUIElements() {
+    // Scroll progress bar
+    window.addEventListener('scroll', updateScrollProgress);
+    
+    // Theme toggle (light/dark mode simulation)
+    themeToggle?.addEventListener('click', toggleTheme);
+    
+    // Scroll to top button
+    scrollToTop?.addEventListener('click', () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        scrollToTop.style.transform = 'scale(1.2) rotate(360deg)';
+        setTimeout(() => {
+            scrollToTop.style.transform = '';
+        }, 300);
+    });
+    
+    // Show/hide scroll to top button
+    window.addEventListener('scroll', () => {
+        if (window.scrollY > 300) {
+            scrollToTop?.classList.add('visible');
+        } else {
+            scrollToTop?.classList.remove('visible');
+        }
+    });
+    
+    // Filter buttons
+    const filterBtns = document.querySelectorAll('.filter-btn');
+    filterBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            // Remove active class from all
+            filterBtns.forEach(b => b.classList.remove('active'));
+            // Add active to clicked
+            btn.classList.add('active');
+            currentFilter = btn.dataset.filter;
+            applyFilter();
+            
+            // Add click animation
+            btn.style.transform = 'scale(0.9)';
+            setTimeout(() => btn.style.transform = '', 100);
+        });
+        
+        // Add ripple effect
+        addRippleEffect(btn);
+    });
+}
+
+function updateScrollProgress() {
+    const windowHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+    const scrolled = (window.scrollY / windowHeight) * 100;
+    if (scrollProgress) {
+        scrollProgress.style.width = scrolled + '%';
+    }
+}
+
+function toggleTheme() {
+    document.body.classList.toggle('light-theme');
+    themeToggle.style.transform = 'rotate(180deg) scale(1.2)';
+    setTimeout(() => {
+        themeToggle.style.transform = '';
+    }, 300);
+}
+
+function updateStats() {
+    // Animate numbers counting up
+    const totalPdfs = pdfData.length;
+    const categories = [...new Set(pdfData.map(p => p.category))].length;
+    
+    animateNumber(totalPdfsEl, 0, totalPdfs, 1500);
+    animateNumber(totalCategoriesEl, 0, categories, 1500);
+}
+
+function animateNumber(element, start, end, duration) {
+    if (!element) return;
+    const range = end - start;
+    const increment = range / (duration / 16);
+    let current = start;
+    
+    const timer = setInterval(() => {
+        current += increment;
+        if (current >= end) {
+            element.textContent = end;
+            clearInterval(timer);
+        } else {
+            element.textContent = Math.floor(current);
+        }
+    }, 16);
+}
+
+function applyFilter() {
+    if (currentFilter === 'all') {
+        // Show all subjects
+        subjectsGrid.style.display = 'grid';
+        searchResults.style.display = 'none';
+        noResults.style.display = 'none';
+    } else {
+        // Filter by category
+        const filtered = pdfData.filter(p => p.category === currentFilter);
+        if (filtered.length > 0) {
+            displayEnhancedSearchResults(filtered);
+        } else {
+            displayEnhancedNoResults();
+        }
+    }
 }
 
 // === Search ===
@@ -301,22 +538,43 @@ function displayEnhancedSearchResults(results) {
 
 function createEnhancedPdfElement(pdf) {
     const item = document.createElement('div');
-    item.className = 'pdf-item';
+    item.className = 'pdf-item smooth-transition';
     item.innerHTML = `
         <div class="pdf-info">
             <div class="pdf-title">${pdf.title}</div>
             ${pdf.description ? `<div class="pdf-description">${pdf.description}</div>` : ''}
         </div>
         <div class="pdf-actions">
-            <button class="btn-view" data-path="${pdf.path}" data-filename="${pdf.filename}">View</button>
-            <a href="${pdf.path}" download="${pdf.filename}" class="btn-download">Download</a>
+            <button class="btn-view smooth-transition" data-path="${pdf.path}" data-filename="${pdf.filename}">View</button>
+            <a href="${pdf.path}" download="${pdf.filename}" class="btn-download smooth-transition">Download</a>
         </div>
     `;
-    item.querySelector('.btn-view').addEventListener('click', (e) => {
-        openPdfModal(e.target.dataset.path, e.target.dataset.filename);
+    
+    const viewBtn = item.querySelector('.btn-view');
+    viewBtn.addEventListener('click', (e) => {
+        // Add click feedback
+        e.target.style.transform = 'scale(0.95)';
+        setTimeout(() => {
+            e.target.style.transform = '';
+            openPdfModal(e.target.dataset.path, e.target.dataset.filename);
+        }, 100);
     });
-    item.addEventListener('mouseenter', () => item.style.transform = 'translateX(8px)');
-    item.addEventListener('mouseleave', () => item.style.transform = 'translateX(0)');
+    
+    // Enhanced hover with smooth transitions
+    item.addEventListener('mouseenter', () => {
+        item.style.transform = 'translateX(8px)';
+        item.style.background = 'rgba(255, 255, 255, 0.15)';
+    });
+    
+    item.addEventListener('mouseleave', () => {
+        item.style.transform = 'translateX(0)';
+        item.style.background = '';
+    });
+    
+    // Add ripple effects
+    addRippleEffect(viewBtn);
+    addRippleEffect(item.querySelector('.btn-download'));
+    
     return item;
 }
 
@@ -346,21 +604,42 @@ function setupEventListeners() {
     let timeout;
     searchInput?.addEventListener('input', () => {
         clearTimeout(timeout);
+        // Add typing animation feedback
+        searchInput.style.transform = 'scale(1.02)';
+        setTimeout(() => {
+            searchInput.style.transform = 'scale(1)';
+        }, 100);
         timeout = setTimeout(handleSearch, 300);
     });
 
     clearSearchBtn?.addEventListener('click', () => {
-        clearSearchBtn.style.transform = 'translateY(-50%) rotate(180deg)';
+        clearSearchBtn.style.transform = 'translateY(-50%) rotate(180deg) scale(1.2)';
         clearSearchResults();
-        setTimeout(() => clearSearchBtn.style.transform = 'translateY(-50%) rotate(0deg)', 300);
+        setTimeout(() => clearSearchBtn.style.transform = 'translateY(-50%) rotate(0deg) scale(1)', 300);
     });
 
-    closeModalBtn?.addEventListener('click', closePdfModal);
-    pdfModal?.addEventListener('click', e => e.target === pdfModal && closePdfModal());
+    closeModalBtn?.addEventListener('click', () => {
+        closeModalBtn.style.transform = 'rotate(90deg) scale(1.2)';
+        setTimeout(() => {
+            closeModalBtn.style.transform = '';
+            closePdfModal();
+        }, 150);
+    });
+    
+    pdfModal?.addEventListener('click', e => {
+        if (e.target === pdfModal) {
+            closePdfModal();
+        }
+    });
 
     document.addEventListener('keydown', e => {
-        if (pdfModal.classList.contains('active') && e.key === 'Escape') closePdfModal();
+        if (pdfModal.classList.contains('active') && e.key === 'Escape') {
+            closePdfModal();
+        }
     });
+    
+    // Add ripple effects to buttons
+    if (clearSearchBtn) addRippleEffect(clearSearchBtn);
 }
 
 // === Dynamic Subject Page Generation (unchanged logic) ===
